@@ -113,4 +113,4 @@ def generate_sis(src_folder,aoi,dest_folder,sis_folder,skip_clip=False):
     gen_chlorophyll_index(dest_folder, sis_folder)
 
 
-generate_sis("wimmera","all.geojson","out","sis1",True)
+generate_sis("wimmera2","all.geojson","out2","sis2",False)
