@@ -51,60 +51,66 @@ def get_band_tile(src_folder,band_number):
         if tokens[2] == band_number:
             return tile
 
-def gen_ndvi(dest_folder, sis_folder):
-    sis_subfolder = os.path.join(sis_folder, "NDVI")
+def gen_spectral_index(dest_folder, sis_folder, index_name, band_files, index_function, cmap, resolution):
+    sis_subfolder = os.path.join(sis_folder, index_name)
     os.makedirs(sis_subfolder, exist_ok=True)
     for site in os.listdir(dest_folder):
-        site_folder = os.path.join(dest_folder, site,"R10m")
-        b4_file = get_band_tile(site_folder,"B04")
-        b8_file = get_band_tile(site_folder,"B08")
-        b4_path = os.path.join(site_folder, b4_file)
-        b8_path = os.path.join(site_folder, b8_file)
-        with rasterio.open(b4_path) as b4_src, rasterio.open(b8_path) as b8_src:
-            b4 = b4_src.read(1).astype(np.float32)
-            b8 = b8_src.read(1).astype(np.float32)
-            np.seterr(divide='ignore', invalid='ignore')
-            ndvi = (b8 - b4) / (b8 + b4)
-            ndvi[np.isnan(ndvi)] = 0
-        plt.imshow(ndvi, cmap='RdYlGn')
-        plt.colorbar(label='NDVI')
+        site_folder = os.path.join(dest_folder, site, resolution)
+        band_paths = {band: os.path.join(site_folder, get_band_tile(site_folder, band)) for band in band_files}
+        with rasterio.open(band_paths[band_files[0]]) as src:
+            width, height = src.width, src.height
+        bands = {band: rasterio.open(band_paths[band]).read(1).astype(np.float32) for band in band_files}
+        np.seterr(divide='ignore', invalid='ignore')
+        index = index_function(*[bands[band] for band in band_files])
+        index[np.isnan(index)] = 0
+        plt.imshow(index, cmap=cmap)
+        plt.colorbar(label=index_name)
         plt.axis('off')
-        output_path = os.path.join(sis_subfolder, f"{site}.tif")
+        output_path = os.path.join(sis_subfolder, f"{site}.png")
         plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
         plt.close()
 
+def gen_ndvi(dest_folder, sis_folder):
+    gen_spectral_index(dest_folder, sis_folder, "NDVI", ["B04", "B08"], lambda b4, b8: (b8 - b4) / (b8 + b4), "RdYlGn", "R10m")
+
 def gen_evi(dest_folder, sis_folder):
-    sis_subfolder = os.path.join(sis_folder, "EVI")
-    os.makedirs(sis_subfolder, exist_ok=True)
-    for site in os.listdir(dest_folder):
-        site_folder = os.path.join(dest_folder, site,"R10m")
-        b2_file = get_band_tile(site_folder,"B02")
-        b4_file = get_band_tile(site_folder,"B04")
-        b8_file = get_band_tile(site_folder,"B08")
-        b2_path = os.path.join(site_folder, b2_file)
-        b4_path = os.path.join(site_folder, b4_file)
-        b8_path = os.path.join(site_folder, b8_file)
-        with rasterio.open(b2_path) as b2_src, rasterio.open(b4_path) as b4_src, rasterio.open(b8_path) as b8_src:
-            b2 = b2_src.read(1).astype(np.float32)
-            b4 = b4_src.read(1).astype(np.float32)
-            b8 = b8_src.read(1).astype(np.float32)
-            np.seterr(divide='ignore', invalid='ignore')
-            evi = 2.5 * (b8 - b4) / (b8 + 6 * b4 - 7.5 * b2 + 1)
-            evi[np.isnan(evi)] = 0
-        plt.imshow(evi, cmap='RdYlGn')
-        plt.colorbar(label='EVI')
-        plt.axis('off')
-        output_path = os.path.join(sis_subfolder, f"{site}.tif")
-        plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
-        plt.close()
+    gen_spectral_index(dest_folder, sis_folder, "EVI", ["B02", "B04", "B08"], lambda b2, b4, b8: 2.5 * (b8 - b4) / (b8 + 6 * b4 - 7.5 * b2 + 1), "RdYlGn", "R10m")
+
+def gen_savi(dest_folder, sis_folder, l=0.5):
+    gen_spectral_index(dest_folder, sis_folder, "SAVI", ["B04", "B08"], lambda b4, b8: (b8 - b4) / (b8 + b4 + l) * (1 + l), "RdYlGn", "R10m")
+
+def gen_ndwi(dest_folder, sis_folder):
+    gen_spectral_index(dest_folder, sis_folder, "NDWI", ["B8A", "B11"], lambda b8, b11: (b8 - b11) / (b8 + b11), "Blues", "R20m")
+
+def gen_pri(dest_folder, sis_folder):
+    gen_spectral_index(dest_folder, sis_folder, "PRI", ["B03", "B04"], lambda b3, b4: (b3 - b4) / (b3 + b4), "RdYlBu", "R10m")
+
+def gen_msavi(dest_folder, sis_folder):
+    gen_spectral_index(dest_folder, sis_folder, "MSAVI", ["B04", "B08"], lambda b4, b8: (2 * b8 + 1 - ((2 * b8 + 1) ** 2 - 8 * (b8 - b4)) ** 0.5) / 2, "RdYlGn", "R10m")
+
+def gen_ndbi(dest_folder, sis_folder):
+    gen_spectral_index(dest_folder, sis_folder, "NDBI", ["B8A", "B11"], lambda b8, b11: (b11 - b8) / (b11 + b8), "Purples", "R20m")
+
+def gen_ndii(dest_folder, sis_folder):
+    gen_spectral_index(dest_folder, sis_folder, "NDII", ["B8A", "B11"], lambda b8, b11: (b8 - b11) / (b8 + b11), "YlGn", "R20m")
+
+def gen_chlorophyll_index(dest_folder, sis_folder):
+    gen_spectral_index(dest_folder, sis_folder, "Chlorophyll_Index", ["B05", "B8A"], lambda b5, b8a: (b8a / b5) - 1, "Greens", "R20m")
 
 
 
 def generate_sis(src_folder,aoi,dest_folder,sis_folder,skip_clip=False):
     if not skip_clip:
         clip(src_folder,aoi,dest_folder)
-    gen_ndvi(dest_folder,sis_folder)
-    gen_evi(dest_folder,sis_folder)
+    gen_ndvi(dest_folder, sis_folder)
+    gen_evi(dest_folder, sis_folder)
+    gen_savi(dest_folder, sis_folder)
+    gen_ndwi(dest_folder, sis_folder)
+    gen_pri(dest_folder, sis_folder)
+    gen_msavi(dest_folder, sis_folder)
+    gen_ndbi(dest_folder, sis_folder)
+    gen_ndii(dest_folder, sis_folder)
+    gen_chlorophyll_index(dest_folder, sis_folder)
 
 
 generate_sis("wimmera","all.geojson","out","sis1",True)
