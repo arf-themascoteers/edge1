@@ -8,26 +8,32 @@ import shutil
 def clip_tile(src_folder, res, tile, aoi, dest_folder):
     geojson = gpd.read_file(aoi)
     tile_loc = os.path.join(src_folder, res, tile)
-    res_folder = os.path.join(dest_folder, res)
-    os.makedirs(res_folder,exist_ok=True)
-    clipped_loc = os.path.join(dest_folder, res, tile)
     with rasterio.open(tile_loc) as src:
         raster_crs = src.crs
         if geojson.crs != raster_crs:
             geojson = geojson.to_crs(raster_crs)
-        aoi = [feature["geometry"] for feature in geojson.__geo_interface__["features"]]
-        out_image, out_transform = mask(src, aoi, crop=True)
-        out_meta = src.meta
 
-    out_meta.update({
-        "driver": "GTiff",
-        "height": out_image.shape[1],
-        "width": out_image.shape[2],
-        "transform": out_transform
-    })
+        for idx, feature in enumerate(geojson.__geo_interface__["features"]):
+            polygon = [feature["geometry"]]
+            try:
+                out_image, out_transform = mask(src, polygon, crop=True)
+                out_meta = src.meta
 
-    with rasterio.open(f"{clipped_loc}.tiff", 'w', **out_meta) as dest:
-        dest.write(out_image)
+                out_meta.update({
+                    "driver": "GTiff",
+                    "height": out_image.shape[1],
+                    "width": out_image.shape[2],
+                    "transform": out_transform
+                })
+                clipped_folder = str(os.path.join(dest_folder, str(idx+1),res))
+                os.makedirs(clipped_folder, exist_ok=True)
+                clipped_loc = os.path.join(clipped_folder, f"{tile}.tif")
+                with rasterio.open(clipped_loc, 'w', **out_meta) as dest:
+                    dest.write(out_image)
+            except ValueError:
+                print(f"Polygon {idx + 1} does not overlap raster {tile}")
+
+
 
 
 def clip(src_folder,aoi,dest_folder):
@@ -40,4 +46,4 @@ def clip(src_folder,aoi,dest_folder):
             clip_tile(src_folder, res, tile, aoi, dest_folder)
 
 
-clip("wimmera","site_1.geojson","site_1")
+clip("wimmera","all.geojson","out")
